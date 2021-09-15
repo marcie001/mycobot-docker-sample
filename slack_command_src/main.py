@@ -28,13 +28,20 @@ def handle_mycobot_command(ack, respond, command):
     ack()
     args = command['text'].split()
     if len(args) == 0:
-        respond("usage: /mycobot [docker image tag]")
+        respond({
+            "response_type": "in_channel",
+            "text": "usage: /mycobot [docker image tag]",
+        })
     task = Task(command["user_id"], command["channel_id"], args[0], respond)
     tasks.put_nowait(task)
-    respond(f"""Accepted
+    text = f"""Accepted
 task ID: {task.id}
 image: {task.image}
-task queue length: {tasks.qsize()}""")
+task queue length: {tasks.qsize()}"""
+    respond({
+        "response_type": "in_channel",
+        "text": text,
+    })
 
 
 def run_container():
@@ -46,14 +53,21 @@ def run_container():
             text=True,
         )
         if started.returncode != 0:
-            task.respond(f"""failed to start container
+            text = f"""failed to start container
 exit code: {started.returncode}
 stdout: {started.stdout}
-stderr: {started.stderr}""")
+stderr: {started.stderr}"""
+            task.respond({
+                "response_type": "in_channel",
+                "text": text,
+            })
             continue
         else:
             task.container = started.stdout.strip()
-            task.respond(f"task ID: {task.id}\nstart container\ncontainer ID: {task.container}")
+            task.respond({
+                "response_type": "in_channel",
+                "text": f"task ID: {task.id}\nstart container\ncontainer ID: {task.container}",
+            })
 
         waited = subprocess.run(
             ["docker", "container", "wait", task.container],
@@ -70,7 +84,11 @@ stderr: {started.stderr}""")
             capture_output=True,
             text=True,
         )
-        task.respond(f"container exit code: {waited.stdout}\nlogs stdout: {logs.stdout}\nlogs stderr: {logs.stderr}")
+        text = f"container exit code: {waited.stdout.strip()}\nlogs stdout: {logs.stdout}\nlogs stderr: {logs.stderr}"
+        task.respond({
+            "response_type": "in_channel",
+            "text": text,
+        })
 
 
 if __name__ == "__main__":
