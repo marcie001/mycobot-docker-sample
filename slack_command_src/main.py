@@ -14,13 +14,14 @@ app = App(token=os.environ["SLACK_BOT_TOKEN"])
 
 
 class Task:
-    def __init__(self, user, channel, image, respond, container=""):
+    def __init__(self, user, channel, image, respond, container="", done=False):
         self.id = uuid4()
         self.user = user
         self.channel = channel
         self.image = image
         self.respond = respond
         self.container = container
+        self.done = done
 
 
 @app.command("/mycobot")
@@ -42,6 +43,25 @@ task queue length: {tasks.qsize()}"""
         "response_type": "in_channel",
         "text": text,
     })
+
+
+def kill_container_func(task):
+    def f():
+        if task.done:
+            return
+        killed = subprocess.run(
+            ["docker", "container", "wait", task.container],
+            capture_output=True,
+            text=True,
+        )
+        if killed.returncode != 0:
+            if not "No such container:" in killed.stderr:
+                task.respond({
+                    "response_type": "in_channel",
+                    "text": f"failed to kill a container: {task.container}\n{killed.stderr}",
+                })
+
+    return f
 
 
 def run_container():
@@ -69,11 +89,15 @@ stderr: {started.stderr}"""
                 "text": f"task ID: {task.id}\nstart container\ncontainer ID: {task.container}",
             })
 
+        f = kill_container_func(task)
+        threading.Timer(180.0, f).start()
+
         waited = subprocess.run(
             ["docker", "container", "wait", task.container],
             capture_output=True,
             text=True,
         )
+        task.done = True
         logs = subprocess.run(
             ["docker", "container", "logs", task.container],
             capture_output=True,
