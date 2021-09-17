@@ -6,7 +6,9 @@ from uuid import uuid4
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from dotenv import load_dotenv
 
+load_dotenv()
 tasks = Queue()
 
 # Install the Slack app and get xoxb- token in advance
