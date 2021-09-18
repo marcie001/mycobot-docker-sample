@@ -1,5 +1,6 @@
 import os
 import subprocess
+import signal
 import threading
 from queue import Queue
 from uuid import uuid4
@@ -16,10 +17,8 @@ app = App(token=os.environ["SLACK_BOT_TOKEN"])
 
 
 class Task:
-    def __init__(self, user, channel, image, respond, container="", done=False):
+    def __init__(self, image, respond, container="", done=False):
         self.id = uuid4()
-        self.user = user
-        self.channel = channel
         self.image = image
         self.respond = respond
         self.container = container
@@ -57,7 +56,7 @@ def kill_container_func(task):
             text=True,
         )
         if killed.returncode != 0:
-            if not "No such container:" in killed.stderr:
+            if "No such container:" not in killed.stderr:
                 task.respond({
                     "response_type": "in_channel",
                     "text": f"failed to kill a container: {task.container}\n{killed.stderr}",
@@ -69,6 +68,9 @@ def kill_container_func(task):
 def run_container():
     while True:
         task = tasks.get()
+        if task == "close":
+            print("exit run_container")
+            return
         started = subprocess.run(
             ["docker", "container", "run", "-d", "--device", "/dev/ttyUSB0", task.image],
             capture_output=True,
@@ -117,6 +119,20 @@ stderr: {started.stderr}"""
         })
 
 
+def cleanup_func(socket_mode_handler):
+    def f(signum, frame):
+        print("cleanup")
+        socket_mode_handler.close()
+        tasks.put_nowait("close")
+
+    return f
+
+
 if __name__ == "__main__":
-    threading.Thread(target=run_container).start()
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    handler.connect()
+    cleanup = cleanup_func(handler)
+    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, cleanup)
+
+    run_container()
