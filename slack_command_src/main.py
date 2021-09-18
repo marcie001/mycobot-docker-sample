@@ -17,12 +17,13 @@ app = App(token=os.environ["SLACK_BOT_TOKEN"])
 
 
 class Task:
-    def __init__(self, image, respond, container="", done=False):
+    def __init__(self, image="", respond="", container="", done=False, cleanup=False):
         self.id = uuid4()
         self.image = image
         self.respond = respond
         self.container = container
         self.done = done
+        self.cleanup = cleanup
 
 
 @app.command("/mycobot")
@@ -34,7 +35,7 @@ def handle_mycobot_command(ack, respond, command):
             "response_type": "in_channel",
             "text": "usage: /mycobot [docker image tag]",
         })
-    task = Task(command["user_id"], command["channel_id"], args[0], respond)
+    task = Task(image=args[0], respond=respond)
     tasks.put_nowait(task)
     text = f"""Accepted
 task ID: {task.id}
@@ -68,7 +69,7 @@ def kill_container_func(task):
 def run_container():
     while True:
         task = tasks.get()
-        if task == "close":
+        if task.cleanup:
             print("exit run_container")
             return
         started = subprocess.run(
@@ -123,7 +124,7 @@ def cleanup_func(socket_mode_handler):
     def f(signum, frame):
         print("cleanup")
         socket_mode_handler.close()
-        tasks.put_nowait("close")
+        tasks.put_nowait(Task(cleanup=True))
 
     return f
 
@@ -131,8 +132,8 @@ def cleanup_func(socket_mode_handler):
 if __name__ == "__main__":
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     handler.connect()
-    cleanup = cleanup_func(handler)
-    signal.signal(signal.SIGINT, cleanup)
-    signal.signal(signal.SIGTERM, cleanup)
+    c = cleanup_func(handler)
+    signal.signal(signal.SIGINT, c)
+    signal.signal(signal.SIGTERM, c)
 
     run_container()
