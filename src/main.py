@@ -2,7 +2,7 @@ from pymycobot.mycobot import MyCobot
 from pymycobot.genre import Angle
 from time import sleep
 
-mc = MyCobot('/dev/ttyUSB1')
+mc = MyCobot('/dev/ttyUSB0')
 if mc.is_power_on() == 0:
     mc.power_on()
 
